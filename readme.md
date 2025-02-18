@@ -1,8 +1,10 @@
 # Exploring Language Models Embeddings Space Capacity
 
-This repository contains code for compressing texts into language models input vectors and notebooks used to make plots for the paper:
+This repository contains code and notebooks used to make plots for the paper:
 
 Kuratov, Y., Arkhipov, M., Bulatov, A., Burtsev, M., "Cramming 1568 Tokens into a Single Vector and Back Again: Exploring the Limits of Embedding Space Capacity"
+
+Our experiments show that a single Llama-3.1-8B input vector can compress and subsequently decode text sequences of over 1,500 tokens. Moreover, this capacity increases nearly linearly when multiple vectors are used.
 
 
 <p align="center">
@@ -10,9 +12,9 @@ Kuratov, Y., Arkhipov, M., Bulatov, A., Burtsev, M., "Cramming 1568 Tokens into 
   <img src="./notebooks/imgs/results_brief.png" width="45%" />
 </p>
 
-Left: **Compressing text into a `[mem]` vector.** The pre-trained LLM is frozen, and we only finetune one or multiple `[mem]` vectors to decode the sequence of tokens $[t_1, t_2, \ldots, t_N]$. `[mem]` vectors are trained for each text separately.
+**Left**: Compressing text into a `[mem]` vector. The pre-trained LLM is frozen, and we only finetune one or multiple `[mem]` vectors to decode the sequence of tokens $[t_1, t_2, \ldots, t_N]$. `[mem]` vectors are trained for each text separately.
 
-Right: **How many tokens fit into a single input vector?** We estimate maximum number of tokens that can be decoded from a single input vector across various language models
+**Right**: How many tokens fit into a single input vector? We estimate maximum number of tokens that can be decoded from a single input vector across various language models
 
 ## Python scripts
 - `train.py` - implements training loop for text compression into a vector.
