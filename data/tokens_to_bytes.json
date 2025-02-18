@@ -1,0 +1,11 @@
+{
+    "EleutherAI/pythia-160m": 0.2314065213385386,
+    "EleutherAI/pythia-410m": 0.2314065213385386,
+    "EleutherAI/pythia-1.4b": 0.2314065213385386,
+    "EleutherAI/pythia-2.8b": 0.2314065213385386,
+    "allenai/OLMo-1B-0724-hf": 0.2314065213385386,
+    "princeton-nlp/Sheared-LLaMA-1.3B": 0.25311069682824416,
+    "meta-llama/Llama-3.2-1B": 0.22920892682059493,
+    "meta-llama/Llama-3.2-3B": 0.22920892682059493,
+    "meta-llama/Meta-Llama-3.1-8B": 0.22920892682059493
+}
