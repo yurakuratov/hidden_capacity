@@ -5,14 +5,11 @@ from tqdm.auto import tqdm
 import pandas as pd
 from model import MemoryCell
 from torch.optim import AdamW
-import matplotlib.pyplot as plt
 import numpy as np
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from tqdm import tqdm
-import torch
 import pickle
 from nltk import sent_tokenize
 from pathlib import Path
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Run experiments with text compression using memory tokens')
@@ -32,8 +29,12 @@ def parse_arguments():
     parser.add_argument('--beta_2', type=float, default=0.9, help='adam beta_2')
     parser.add_argument('--weight_decay', type=float, default=0.01, help='weight decay')
     parser.add_argument('--early_stopping_patience', type=int, default=2000, help='Early stopping patience')
-    parser.add_argument('--shuffled', action='store_true', help='Whether to shuffle the text')
+    parser.add_argument('--shuffled', action='store_true', help='Whether to use random text sampled from GloVe vocab.')
+    parser.add_argument('--save_path', type=str, default='./runs', help='path to save experiments')
+    parser.add_argument('--texts_path', type=str, default='./data/pg19_valid_1k_chunks.csv',
+                        help='path to texts to compress')
     return parser.parse_args()
+
 
 def calculate_accuracy(logits, labels):
     # bs = 1
@@ -43,38 +44,28 @@ def calculate_accuracy(logits, labels):
     correct = (predictions == labels).float()
     return correct.mean().item()
 
+
 def run_single_experiment(N_mem_tokens, text_sample, max_length, num_iterations, sample_idx, run_idx,
                           model_name, dtype, use_flash_attention_2, device, tokenizer, lr, beta_1, beta_2,
                           weight_decay, early_stopping_patience=2000, shuffled=False):
     # split text sample on two parts: prefix and main text
     sentences = sent_tokenize(text_sample)
-    prefix_text = ' '.join(sentences[:len(sentences)//2])
+    # prefix can be used lately for compression analysis
+    # prefix_text = ' '.join(sentences[:len(sentences)//2])
+    # suffix is compressed
     suffix_text = ' '.join(sentences[len(sentences)//2:])
 
     if shuffled:
         vocab = []
-        with open('./vocab_100k.txt') as fin:
+        with open('./data/vocab_100k.txt') as fin:
             for line in fin:
                 vocab += [line.strip()]
         max_length = np.random.randint(2, max_length+1)
         suffix_text = ' '.join(np.random.choice(vocab, size=max_length * 5))
         inp = tokenizer(suffix_text, max_length=max_length, truncation=True, return_tensors='pt').to(device)
-        # shuffled text
-        # suffix_text = suffix_text.split(' ')
-        # np.random.shuffle(suffix_text)
-        # suffix_text = ' '.join(suffix_text)
-        
-        # random vocab
-        # all_tokens_ids = list(range(0, tokenizer.vocab_size))
-        # all_tokens_ids = np.array(list(set(all_tokens_ids) - set(tokenizer.all_special_ids)))
-        # max_length = np.random.randint(2, max_length+1)
-        # inp_ids = np.random.choice(all_tokens_ids, size=max_length)
-        # inp_ids = tokenizer.build_inputs_with_special_tokens(list(inp_ids))[:max_length]
-        # suffix_text = inp_ids[:]
-        # inp = {'input_ids': torch.tensor([inp_ids]).to(device)}
     else:
         inp = tokenizer(suffix_text, max_length=max_length, truncation=True, return_tensors='pt').to(device)
-    
+
     model = AutoModelForCausalLM.from_pretrained(model_name, use_flash_attention_2=use_flash_attention_2)
     model.to(device)
 
@@ -88,12 +79,13 @@ def run_single_experiment(N_mem_tokens, text_sample, max_length, num_iterations,
     memory_dim = getattr(model.config, 'word_embed_proj_dim', getattr(model.config, 'hidden_size'))
     model_with_memory = MemoryCell(model, N_mem_tokens, memory_dim)
     model_with_memory.to(device)
-    
+
     opt = AdamW(model_with_memory.parameters(), lr=lr, weight_decay=weight_decay, betas=(beta_1, beta_2))
-    
-    desc = f"Training (m={N_mem_tokens}, l={max_length}, i={sample_idx}), no_mem_loss={orig_loss:.4f}, no_mem_acc={orig_accuracy:.4f}"
+
+    desc = (f"Training (m={N_mem_tokens}, l={max_length}, i={sample_idx}), "
+            f"no_mem_loss={orig_loss:.4f}, no_mem_acc={orig_accuracy:.4f}")
     progress_bar = tqdm(range(num_iterations), desc=desc, leave=False)
-    
+
     losses, accuracies = [], []
     best_loss, best_accuracy, = float('inf'), 0
     best_memory_params = None
@@ -104,14 +96,14 @@ def run_single_experiment(N_mem_tokens, text_sample, max_length, num_iterations,
             out, mem = model_with_memory(**inp)
             loss = out.loss
             accuracy = calculate_accuracy(out.logits, inp['input_ids'])
-        
+
         loss.backward()
         opt.step()
         opt.zero_grad()
         current_loss = loss.item()
         losses.append(current_loss)
         accuracies.append(accuracy)
-        
+
         if best_accuracy < accuracy:
             best_loss = current_loss
             best_accuracy = accuracy
@@ -120,8 +112,9 @@ def run_single_experiment(N_mem_tokens, text_sample, max_length, num_iterations,
         else:
             early_stopping_counter += 1
 
-        progress_bar.set_postfix(loss=f"{current_loss:.4f}", best_loss=f"{best_loss:.4f}", best_acc=f"{best_accuracy:.4f}")
-        
+        progress_bar.set_postfix(loss=f"{current_loss:.4f}", best_loss=f"{best_loss:.4f}",
+                                 best_acc=f"{best_accuracy:.4f}")
+
         if best_accuracy == 1.0:
             break
 
@@ -156,14 +149,15 @@ def run_single_experiment(N_mem_tokens, text_sample, max_length, num_iterations,
             'shuffled': shuffled},
     }
 
+
 def main():
     args = parse_arguments()
 
     print(f'model: {args.model_name}')
     print(f'mem: {args.N_mem_tokens}')
     print(f'len: {args.max_length}')
-    
-    df = pd.read_csv('./notebooks/pg19_valid_1k_chunks.csv', index_col=0)
+
+    df = pd.read_csv(args.texts_path, index_col=0)
 
     device = 'cuda'
     dtype = getattr(torch, args.dtype)
@@ -182,22 +176,31 @@ def main():
                 continue
 
             aggregated_results = []
+
+            save_path = Path(f'./{args.save_path}/{args.model_name}')
+            if not args.shuffled:
+                save_path = save_path / f'mem_{N_mem_tokens}_len_{max_length}.pkl'
+            else:
+                save_path = save_path / f'mem_{N_mem_tokens}_len_{max_length}_rnd_vocab_100k.pkl'
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            print(f'save_path: {save_path}')
+
+            if save_path.exists():
+                print(f'loading previous results from {save_path}')
+                aggregated_results = pickle.load(open(save_path, 'rb'))
+
             for sample_idx, sample in enumerate(samples):
                 for run in range(num_runs):
-                    result = run_single_experiment(N_mem_tokens, sample, max_length, args.num_iterations, sample_idx, run,
-                                                   args.model_name, dtype, args.use_flash_attention_2, device, tokenizer,
-                                                   args.lr, args.beta_1, args.beta_2, args.weight_decay,
+                    result = run_single_experiment(N_mem_tokens, sample, max_length, args.num_iterations, sample_idx,
+                                                   run, args.model_name, dtype, args.use_flash_attention_2, device,
+                                                   tokenizer, args.lr, args.beta_1, args.beta_2, args.weight_decay,
                                                    args.early_stopping_patience, args.shuffled)
                     aggregated_results.append(result)
                     overall_progress.update(1)
-                    if not args.shuffled:
-                        save_path = Path(f'./runs/{args.model_name}/mem_{N_mem_tokens}_len_{max_length}.pkl')
-                    else:
-                        save_path = Path(f'./runs/{args.model_name}/mem_{N_mem_tokens}_len_{max_length}_rnd_vocab_100k.pkl')
-                    save_path.parent.mkdir(parents=True, exist_ok=True)
                     pickle.dump(aggregated_results, open(save_path, 'wb'))
 
     overall_progress.close()
+
 
 if __name__ == "__main__":
     main()
