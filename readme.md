@@ -32,5 +32,12 @@ Our experiments show that a single Llama-3.1-8B input vector can compress and su
 
 ## Citation
 ```
-TBA
+@misc{kuratov2025cramming,
+    title={Cramming 1568 Tokens into a Single Vector and Back Again: Exploring the Limits of Embedding Space Capacity},
+    author={Yuri Kuratov and Mikhail Arkhipov and Aydar Bulatov and Mikhail Burtsev},
+    year={2025},
+    eprint={2502.13063},
+    archivePrefix={arXiv},
+    primaryClass={cs.CL}
+}
 ```
