@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-
-import sys
 import argparse
 
 parser = argparse.ArgumentParser(description='Extract top N words from GloVe embeddings.')
@@ -8,6 +5,9 @@ parser.add_argument('--glove_path', type=str, help='Path to the GloVe embeddings
 parser.add_argument('--vocab_size', type=int, help='Number of words to extract.')
 parser.add_argument('--output_path', type=str, help='Path to save the extracted embeddings.')
 
+
+# https://nlp.stanford.edu/data/glove.6B.zip
+# python make_vocab.py --glove_path ./glove.6B/glove.6B.50d.txt --vocab_size 100000 --output_path ./data/vocab_100k.txt
 def main():
     args = parser.parse_args()
 
@@ -24,6 +24,7 @@ def main():
             outfile.write(f"{word}\n")
 
     print(f"Successfully extracted top {vocab_size} words to '{output_path}'.")
+
 
 if __name__ == '__main__':
     main()
